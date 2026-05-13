@@ -1,0 +1,140 @@
+/**
+ * 前台 Jotai 原子定义。
+ *
+ * 服务端获取的 nav / websiteData 通过 SiteStoreProvider 水合进只读根原子；
+ * 组件按需订阅衍生 atom，配合 Provider 隔离保证每次请求独立。
+ */
+import { atom } from "jotai";
+import type { Key } from "@heroui/react";
+import type { LayoutConfig, NavCategory, NavConfig, NavSite, WebsiteData } from "@/types";
+
+/** 站点默认布局配置，和原 AppLayout 中保持一致 */
+export const DEFAULT_LAYOUT: Required<LayoutConfig> = {
+	maxWidth: "1400px",
+	contentPaddingLeft: "8px",
+	contentPaddingRight: "16px",
+	sectionGap: "16px",
+	showSidebar: true,
+	sidebarWidth: "224px",
+	showFloatingActions: true,
+	showFloatingQrCode: true,
+	showFooterQrCode: true,
+	showFooter: true,
+	showSearch: true,
+	showCategoryTitle: true,
+	showCategoryDescription: true,
+	cardMinWidth: "160px",
+	cardHeight: "64px",
+	cardGridPadding: "8px",
+	iconBorderRadius: "full",
+	defaultIconPadding: "",
+};
+
+const EMPTY_WEBSITE: WebsiteData = { categories: [] };
+const EMPTY_FOOTER_LINKS: NavConfig["footerLinks"] = [];
+const EMPTY_NAV: NavConfig = {
+	title: "",
+	name: "",
+	description: "",
+	keywords: [],
+	logo: "",
+	favicon: "",
+	author: "",
+	copyright: "",
+	icp: "",
+	beian: "",
+	qrCode: "",
+	qrCodeText: "",
+	footerLinks: [],
+	search: {
+		defaultEngine: "",
+		enableLocalSearch: false,
+		placeholder: "",
+		engines: [],
+	},
+	ads: [],
+};
+
+// ─── 根原子（只读） ──────────────────────────────────────────────────────
+
+export const siteNavAtom = atom<NavConfig>(EMPTY_NAV);
+export const siteWebsiteDataAtom = atom<WebsiteData>(EMPTY_WEBSITE);
+
+// ─── 派生原子 ────────────────────────────────────────────────────────────
+
+export const layoutAtom = atom<Required<LayoutConfig>>((get) => ({
+	...DEFAULT_LAYOUT,
+	...(get(siteNavAtom).layout ?? {}),
+}));
+
+export const categoriesAtom = atom((get) => get(siteWebsiteDataAtom).categories);
+
+export const enabledAdsAtom = atom((get) =>
+	get(siteNavAtom)
+		.ads.filter((a) => a.enabled)
+		.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)),
+);
+
+export const flatSitesAtom = atom((get) => {
+	const result: Array<NavSite & { categoryId: string; categoryName: string }> =
+		[];
+	const walk = (cats: NavCategory[]) => {
+		for (const cat of cats) {
+			if (cat.sites) {
+				for (const s of cat.sites) {
+					result.push({
+						...s,
+						categoryId: cat.id,
+						categoryName: cat.name,
+					});
+				}
+			}
+			if (cat.children) walk(cat.children);
+		}
+	};
+	walk(get(siteWebsiteDataAtom).categories);
+	return result;
+});
+
+// 一些常用的细粒度派生，避免组件订阅整个 nav
+export const navNameAtom = atom((get) => get(siteNavAtom).name);
+export const navLogoAtom = atom((get) => get(siteNavAtom).logo);
+export const navCopyrightAtom = atom((get) => get(siteNavAtom).copyright);
+export const navIcpAtom = atom((get) => get(siteNavAtom).icp);
+export const navBeianAtom = atom((get) => get(siteNavAtom).beian);
+export const navQrCodeAtom = atom((get) => get(siteNavAtom).qrCode);
+export const navQrCodeTextAtom = atom((get) => get(siteNavAtom).qrCodeText);
+export const footerLinksAtom = atom(
+	(get) => get(siteNavAtom).footerLinks ?? EMPTY_FOOTER_LINKS,
+);
+export const searchConfigAtom = atom((get) => get(siteNavAtom).search);
+export const adsAspectRatioAtom = atom(
+	(get) => get(siteNavAtom).adsAspectRatio,
+);
+export const showAdsAtom = atom((get) => get(siteNavAtom).showAds !== false);
+export const showRecentVisitsAtom = atom(
+	(get) => get(siteNavAtom).showRecentVisits !== false,
+);
+export const recentVisitsMaxAtom = atom(
+	(get) => get(siteNavAtom).recentVisitsMax ?? 20,
+);
+
+/** 启用的插件列表（按 sort 排序），供 layout 注入使用 */
+export const enabledPluginsAtom = atom((get) => {
+	const plugins = get(siteNavAtom).plugins ?? [];
+	return plugins
+		.filter((p) => p.enabled && typeof p.code === "string" && p.code.length > 0)
+		.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+});
+
+// ─── 交互状态 ────────────────────────────────────────────────────────────
+
+/** 当前滚动位置对应的活跃分类 id，由 useActiveSection 写入 */
+export const activeIdAtom = atom<string | undefined>(undefined);
+
+/** 移动端导航抽屉开关 */
+export const navDrawerOpenAtom = atom(false);
+/** 搜索引擎抽屉开关 */
+export const engineDrawerOpenAtom = atom(false);
+/** 当前选中的搜索引擎 id */
+export const engineIdAtom = atom<Key | null>(null);

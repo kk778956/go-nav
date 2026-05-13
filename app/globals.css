@@ -1,26 +1,99 @@
 @import "tailwindcss";
+@import "@heroui/styles";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+	--background: #f5f5f5;
+	--primary: #2d85f0;
+	--primary-foreground: #ffffff;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+	--background: #141414;
+	--primary: #4a9df8;
+	--primary-foreground: #1e1e1e;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+	scrollbar-width: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+	background: var(--background);
+	font-size: 14px;
+}
+
+.dark body,
+body:where(.dark *) {
+	color: #e5e5e5;
+}
+
+::-webkit-scrollbar {
+	display: none !important;
+}
+
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+input,
+textarea,
+button,
+select,
+span {
+	font-size: inherit !important;
+	-webkit-text-size-adjust: 100%;
+	-moz-text-size-adjust: 100%;
+	-ms-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+svg {
+	width: 1rem;
+	height: 1rem;
+}
+
+.link__icon {
+	padding: 0rem;
+}
+
+/* 确保 modal 的表单边框不被遮挡 */
+.modal__body {
+	padding: 4px;
+	margin: 4px -4px -4px -4px;
+}
+
+.modal__dialog[data-placement="auto"] {
+	margin-top: auto;
+	margin-bottom: auto;
+}
+
+/* 禁用态按钮统一鼠标样式 */
+button[disabled],
+button[data-disabled],
+[role="button"][data-disabled],
+a[data-disabled] {
+	cursor: not-allowed !important;
+	pointer-events: all !important;
+}
+
+.select__trigger {
+	padding-right: 16px !important;
 }

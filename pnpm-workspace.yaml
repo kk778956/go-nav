@@ -1,3 +1,9 @@
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+packages:
+  - "."
+
+confirmModulesPurge: false
+verifyDepsBeforeRun: false
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true

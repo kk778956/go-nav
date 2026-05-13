@@ -1,0 +1,118 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { NavSite } from "@/types";
+
+const STORAGE_KEY = "go-nav-recent-visits";
+const EVENT_KEY = "go-nav-recent-visits-update";
+const MAX_ITEMS = 50;
+
+export interface RecentVisit {
+	url: string;
+	title: string;
+	icon?: string;
+	description?: string;
+	timestamp: number;
+}
+
+const EMPTY_VISITS: RecentVisit[] = [];
+
+function readVisits(): RecentVisit[] {
+	try {
+		const raw = localStorage.getItem(STORAGE_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+}
+
+function writeVisits(visits: RecentVisit[]) {
+	try {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(visits));
+	} catch {
+		// ignore
+	}
+}
+
+function sameVisits(a: RecentVisit[], b: RecentVisit[]) {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (
+			a[i].url !== b[i].url ||
+			a[i].title !== b[i].title ||
+			a[i].timestamp !== b[i].timestamp
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
+export function recordVisit(site: NavSite) {
+	if (typeof window === "undefined") return;
+	const visits = readVisits();
+	const key = `${site.url}::${site.title}`;
+	const filtered = visits.filter((v) => `${v.url}::${v.title}` !== key);
+	const entry: RecentVisit = {
+		url: site.url,
+		title: site.title,
+		icon: site.icon,
+		description: site.description,
+		timestamp: Date.now(),
+	};
+	const next = [entry, ...filtered].slice(0, MAX_ITEMS);
+	writeVisits(next);
+	window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: next }));
+}
+
+export function useRecentVisits() {
+	const [visits, setVisits] = useState<RecentVisit[]>(EMPTY_VISITS);
+	const [mounted, setMounted] = useState(false);
+	const syncRef = useRef(false);
+
+	const sync = useCallback(() => {
+		const next = readVisits();
+		setVisits((prev) => (sameVisits(prev, next) ? prev : next));
+	}, []);
+
+	useEffect(() => {
+		setMounted(true);
+		sync();
+	}, [sync]);
+
+	useEffect(() => {
+		const handler = (e: Event) => {
+			const next = (e as CustomEvent<RecentVisit[]>).detail;
+			if (!Array.isArray(next)) return;
+			setVisits((prev) => (sameVisits(prev, next) ? prev : next));
+		};
+		window.addEventListener(EVENT_KEY, handler);
+		return () => window.removeEventListener(EVENT_KEY, handler);
+	}, []);
+
+	useEffect(() => {
+		if (!mounted) return;
+
+		const onFocus = () => {
+			if (!syncRef.current) {
+				syncRef.current = true;
+				sync();
+				setTimeout(() => {
+					syncRef.current = false;
+				}, 500);
+			}
+		};
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [mounted, sync]);
+
+	const clearVisits = useCallback(() => {
+		writeVisits(EMPTY_VISITS);
+		setVisits((prev) => (prev.length === 0 ? prev : EMPTY_VISITS));
+		window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: EMPTY_VISITS }));
+	}, []);
+
+	return { visits, clearVisits, mounted };
+}

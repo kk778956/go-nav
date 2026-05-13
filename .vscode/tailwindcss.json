@@ -1,0 +1,55 @@
+{
+    "version": 1.1,
+    "atDirectives": [
+        {
+            "name": "@tailwind",
+            "description": "Use the `@tailwind` directive to insert Tailwind's `base`, `components`, `utilities` and `screens` styles into your CSS.",
+            "references": [
+                {
+                    "name": "Tailwind Documentation",
+                    "url": "https://tailwindcss.com/docs/functions-and-directives#tailwind"
+                }
+            ]
+        },
+        {
+            "name": "@apply",
+            "description": "Use the `@apply` directive to inline any existing utility classes into your own custom CSS.",
+            "references": [
+                {
+                    "name": "Tailwind Documentation",
+                    "url": "https://tailwindcss.com/docs/functions-and-directives#apply"
+                }
+            ]
+        },
+        {
+            "name": "@custom-variant",
+            "description": "This is a custom directive (not part of standard Tailwind) used for defining pseudo-class variants like `dark`, `hover`, etc. in some extended configurations or plugins.",
+            "references": [
+                {
+                    "name": "Tailwind Plugins - Custom Variants",
+                    "url": "https://tailwindcss.com/docs/plugins#adding-variants"
+                }
+            ]
+        },
+        {
+            "name": "@plugin",
+            "description": "A non-standard directive often used in custom build systems or preprocessors to import Tailwind-compatible plugins directly in CSS files. Not supported by default.",
+            "references": [
+                {
+                    "name": "Tailwind Plugins Guide",
+                    "url": "https://tailwindcss.com/docs/plugins"
+                }
+            ]
+        },
+        {
+            "name": "@source",
+            "description": "This directive is not part of Tailwind or PostCSS, and appears to be used for including external JavaScript/TypeScript files related to themes or components.",
+            "references": []
+        },
+        {
+            "name": "@config",
+            "description": "A placeholder directive that may indicate where the Tailwind configuration file is located. Not recognized by Tailwind itself.",
+            "references": []
+        }
+    ]
+}

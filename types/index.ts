@@ -1,0 +1,234 @@
+/**
+ * 主题模式
+ * - "light": 始终亮色
+ * - "dark": 始终暗色
+ * - "system": 跟随系统
+ */
+export type ThemeMode = "light" | "dark" | "system";
+
+/**
+ * 布局与显示配置
+ */
+export interface LayoutConfig {
+	/** 内容区最大宽度，如 "1200px"、"1400px"、"100%"（不限制） */
+	maxWidth?: string;
+	/** 内容区右侧内边距，如 "16px"、"24px" */
+	contentPaddingRight?: string;
+	/** 内容区左侧内边距（有侧边栏时通常比右侧小），如 "8px"、"16px" */
+	contentPaddingLeft?: string;
+	/** 分类之间的间距，如 "16px"、"24px" */
+	sectionGap?: string;
+	/** 是否显示左侧侧边栏（桌面端） */
+	showSidebar?: boolean;
+	/** 侧边栏宽度，如 "224px"、"200px" */
+	sidebarWidth?: string;
+	/** 是否显示浮动操作按钮（回到顶部等） */
+	showFloatingActions?: boolean;
+	/** 是否在浮动按钮显示二维码入口 */
+	showFloatingQrCode?: boolean;
+	/** 是否在页脚显示二维码 */
+	showFooterQrCode?: boolean;
+	/** 是否显示页脚 */
+	showFooter?: boolean;
+	/** 是否显示搜索栏 */
+	showSearch?: boolean;
+	/** 是否显示分类标题（分类名称） */
+	showCategoryTitle?: boolean;
+	/** 是否显示分类描述（分类名称下方的描述文字） */
+	showCategoryDescription?: boolean;
+	/** 网站卡片最小宽度，如 "160px"、"200px" */
+	cardMinWidth?: string;
+	/** 网站卡片高度，如 "64px"、"72px" */
+	cardHeight?: string;
+	/** 卡片网格左右内边距，如 "8px"、"12px" */
+	cardGridPadding?: string;
+	/** 网站卡片图标圆角，如 "full"、"12px"、"8px" */
+	iconBorderRadius?: string;
+	/** 网站图标默认内边距，如 "8px"、"6px" */
+	defaultIconPadding?: string;
+}
+
+/**
+ * 网站数据 - website.json 的类型定义
+ * 只包含分类和网址数据
+ */
+export interface WebsiteData {
+	/** 所有分类 (支持多级嵌套) */
+	categories: NavCategory[];
+}
+
+/**
+ * 广告配置
+ */
+export interface AdConfig {
+	/** 广告唯一 ID */
+	id: string;
+	/** 广告标题 */
+	title: string;
+	/** 广告描述 */
+	description?: string;
+	/** 广告图片 URL */
+	image?: string;
+	/** 跳转链接 */
+	url: string;
+	/** 是否启用 */
+	enabled: boolean;
+	/** 排序权重（数字越小越靠前） */
+	sort?: number;
+}
+
+/**
+ * 单个网站条目
+ */
+export interface NavSite {
+	/** 唯一 ID (可选)，如不提供将以 title+url 生成 */
+	id?: string;
+	/** 网站名称 */
+	title: string;
+	/** 网站简介，用于卡片描述与本地搜索 */
+	description: string;
+	/** 网站跳转 URL */
+	url: string;
+	/** 网站图标 URL (可为本地/远程，支持 emoji 开头) */
+	icon?: string;
+	/** 图标背景颜色 (hex 格式，如 #FF5733) */
+	bgColor?: string;
+	/** 图标区域内边距，如 "2px"、"4px" */
+	iconPadding?: string;
+	/** 搜索标签，辅助本地搜索命中 */
+	tags?: string[];
+}
+
+/**
+ * 分类节点，可递归嵌套实现多级分类
+ */
+export interface NavCategory {
+	/** 分类唯一 ID，用于锚点与菜单 key */
+	id: string;
+	/** 分类名称 */
+	name: string;
+	/** 分类图标 (可为 emoji 或 URL) */
+	icon?: string;
+	/** 分类描述 (可选，展示在分类标题下方) */
+	description?: string;
+	/** 该分类下的网站列表 */
+	sites?: NavSite[];
+	/** 子分类 (支持无限级嵌套) */
+	children?: NavCategory[];
+}
+
+/**
+ * 自定义代码插件（用于注入自定义 CSS / JS 片段）
+ * - type="css": 代码以 <style> 注入 <head>
+ * - type="js" : 代码以 <script> 注入 <body> 末尾（默认同步执行）
+ */
+export interface PluginConfig {
+	/** 插件唯一 ID */
+	id: string;
+	/** 插件显示名称 */
+	name: string;
+	/** 插件类型：自定义 CSS 或 自定义 JS */
+	type: "css" | "js";
+	/** 插件代码内容（纯文本） */
+	code: string;
+	/** 是否启用（仅启用的插件才会注入到前台页面） */
+	enabled: boolean;
+	/** 备注说明（可选，方便后台识别） */
+	description?: string;
+	/** 排序权重（数字越小越靠前） */
+	sort?: number;
+	/**
+	 * JS 插件加载模式（仅 type="js" 有意义）
+	 * - "sync"（默认）：同步执行，位于 body 末尾
+	 * - "defer"：使用 defer 属性，DOM 解析完成后执行
+	 * - "async"：异步执行（可能在解析过程中执行）
+	 */
+	loading?: "sync" | "defer" | "async";
+}
+
+/**
+ * 搜索引擎配置
+ */
+export interface SearchEngine {
+	/** 唯一 ID (用于切换) */
+	id: string;
+	/** 显示名称 */
+	name: string;
+	/** 搜索 URL，使用 {query} 占位符，程序会替换为搜索词 */
+	url: string;
+	/** 可选图标 URL / emoji */
+	icon?: string;
+}
+
+/**
+ * 导航数据配置 - nav.json 的类型定义
+ * 包含：网站基础信息、搜索、广告、最近访问、布局、主题、页脚等所有后台配置
+ */
+export interface NavConfig {
+	/** 网站标题 (显示于浏览器标签与 SEO title) */
+	title: string;
+	/** 网站名称 (用于页面左上角品牌展示) */
+	name: string;
+	/** 简短描述 (SEO description & 页面副标题) */
+	description: string;
+	/** 关键词列表 (SEO keywords) */
+	keywords: string[];
+	/** Logo 图片 URL（放在 public/ 下或远程图片均可） */
+	logo: string;
+	/** favicon 路径（相对于 public/） */
+	favicon: string;
+	/** 作者 / 所属机构 */
+	author: string;
+	/** 版权信息 (例如 © 2026 xxx) */
+	copyright: string;
+	/** 工信部 ICP 备案号（如：京ICP备xxxxxxxx号-1），留空则不显示 */
+	icp: string;
+	/** 公安网备案号，留空则不显示 */
+	beian: string;
+	/** 公众号二维码图片路径（放在 public/ 下） */
+	qrCode: string;
+	/** 二维码下方提示文字 */
+	qrCodeText: string;
+	/** 页脚友情链接 / 自定义链接 */
+	footerLinks: Array<{
+		/** 链接显示文案 */
+		label: string;
+		/** 链接跳转地址 */
+		href: string;
+	}>;
+	/** 布局与显示控制 */
+	layout?: LayoutConfig;
+	/** 主题模式: "light" | "dark" | "system"（跟随系统），默认 "light" */
+	themeMode?: ThemeMode;
+	/** 搜索相关配置 */
+	search: {
+		/** 默认选中的搜索引擎 ID (`local` 表示本地搜索) */
+		defaultEngine: string;
+		/** 是否启用本地搜索（在网站列表中过滤） */
+		enableLocalSearch: boolean;
+		/** 搜索框占位文字 */
+		placeholder: string;
+		/** 外部搜索引擎列表（id 为 `local` 表示本地搜索保留项，通常不必添加） */
+		engines: SearchEngine[];
+		/** 是否显示搜索引擎切换器（设为 false 则只用默认引擎） */
+		showEngineSelector?: boolean;
+		/** 是否启用搜索联想词（非本地搜索时显示百度搜索联想词） */
+		enableSuggestion?: boolean;
+		/** 是否启用全局 Tab 键快捷聚焦到搜索框（默认 true）
+		 *  开启后：页面任意位置（包括侧边栏/卡片等）按 Tab 都会跳入搜索框；
+		 *  主要供键盘用户快速进入搜索。关闭后使用浏览器原生 Tab 顺序。 */
+		enableTabFocus?: boolean;
+	};
+	/** 广告列表 */
+	ads: AdConfig[];
+	/** 全局广告宽高比（作用于整个广告位区域），如 "16/9"、"4/3"、"1/1"、"2/1"或自定义 "w/h"，默认 "16/9" */
+	adsAspectRatio?: string;
+	/** 是否显示广告区域 */
+	showAds?: boolean;
+	/** 是否显示最近访问 */
+	showRecentVisits?: boolean;
+	/** 最近访问最大显示条数 */
+	recentVisitsMax?: number;
+	/** 自定义代码插件列表（自定义 CSS / JS 注入） */
+	plugins?: PluginConfig[];
+}

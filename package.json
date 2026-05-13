@@ -2,25 +2,44 @@
   "name": "go-nav",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.1.1",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev:static": "BUILD_MODE=static next dev",
+    "build": "next build --webpack",
+    "build:server": "BUILD_MODE=server next build --webpack",
+    "build:static": "BUILD_MODE=static node scripts/sync-uploads.mjs && BUILD_MODE=static next build --webpack",
+    "start": "node .next/standalone/server.js",
+    "lint": "eslint",
+    "docker:build": "sh scripts/docker-build.sh",
+    "docker:up": "docker compose up -d --build",
+    "docker:logs": "docker compose logs -f",
+    "docker:down": "docker compose down",
+    "docker:run": "docker run --rm -p 3000:3000 --env-file .env -v go-nav-data:/app/data go-nav:latest",
+    "docker:push": "sh scripts/docker-push.sh"
   },
   "dependencies": {
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "@heroui/react": "^3.0.4",
+    "@heroui/styles": "^3.0.4",
+    "@iconify/react": "^6.0.2",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "fetch-jsonp": "^1.4.0",
+    "jotai": "^2.20.0",
+    "jotai-family": "^1.0.1",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-icons": "^5.6.0",
+    "terser-webpack-plugin": "^5.6.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint": "^10",
+    "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^6"
   }
 }

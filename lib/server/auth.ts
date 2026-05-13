@@ -1,0 +1,75 @@
+import crypto from "node:crypto";
+
+/** 登录 cookie 名称 */
+export const SESSION_COOKIE = "nav_session";
+
+/** 会话有效期（毫秒）：7 天 */
+export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getSecret(): string {
+	return process.env.SESSION_SECRET || "dev-secret-change-me";
+}
+
+function toBase64Url(buf: Buffer): string {
+	return buf
+		.toString("base64")
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/g, "");
+}
+
+function fromBase64Url(s: string): Buffer {
+	const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+	return Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
+}
+
+function hmac(data: string): string {
+	return toBase64Url(crypto.createHmac("sha256", getSecret()).update(data).digest());
+}
+
+/**
+ * 生成 session token。结构：`base64url(json).base64url(hmac)`
+ */
+export function createSession(username: string): string {
+	const payload = JSON.stringify({ u: username, e: Date.now() + SESSION_TTL_MS });
+	const payloadB64 = toBase64Url(Buffer.from(payload));
+	const mac = hmac(payloadB64);
+	return `${payloadB64}.${mac}`;
+}
+
+/**
+ * 校验 session token，失败返回 null。
+ */
+export function verifySession(token?: string | null): { u: string; e: number } | null {
+	if (!token) return null;
+	const [payloadB64, mac] = token.split(".");
+	if (!payloadB64 || !mac) return null;
+	const expected = hmac(payloadB64);
+	// 防止时序攻击
+	const a = Buffer.from(mac);
+	const b = Buffer.from(expected);
+	if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+	try {
+		const payload = JSON.parse(fromBase64Url(payloadB64).toString("utf-8")) as {
+			u: string;
+			e: number;
+		};
+		if (typeof payload.e !== "number" || payload.e < Date.now()) return null;
+		return payload;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * 校验登录用户名/密码（来自 .env）。
+ */
+export function checkCredentials(username: string, password: string): boolean {
+	const U = process.env.ADMIN_USER || "admin";
+	const P = process.env.ADMIN_PASS || "admin123";
+	// 定长比较
+	const a = Buffer.from(`${username}:${password}`);
+	const b = Buffer.from(`${U}:${P}`);
+	if (a.length !== b.length) return false;
+	return crypto.timingSafeEqual(a, b);
+}
