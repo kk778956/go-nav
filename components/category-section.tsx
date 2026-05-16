@@ -1,16 +1,15 @@
 "use client";
 
 import {
-	memo,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
+    memo,
+    useEffect,
+    useMemo,
+    useRef
 } from "react";
 import { Tabs } from "@heroui/react";
 import type { LayoutConfig, NavCategory } from "@/types";
 import { IconView } from "./icon-view";
-import { SiteCard } from "./site-card";
+import { SiteGrid } from "./site-card";
 
 export const CategorySection = memo(function CategorySection({
 	category,
@@ -266,79 +265,6 @@ function SubcategoryContent({
 		</div>
 	);
 }
-
-/** 大列表分批渲染阈值与步长 */
-const BATCH_THRESHOLD = 80;
-const BATCH_INITIAL = 60;
-const BATCH_STEP = 80;
-
-/** 跨浏览器的 idle 调度 */
-const scheduleIdle = (cb: () => void) => {
-	if (typeof window === "undefined") return 0;
-	const ric = (window as unknown as { requestIdleCallback?: (cb: IdleRequestCallback, opts?: { timeout: number }) => number }).requestIdleCallback;
-	if (typeof ric === "function") {
-		return ric(() => cb(), { timeout: 300 });
-	}
-	return window.setTimeout(cb, 50) as unknown as number;
-};
-const cancelIdle = (id: number) => {
-	if (typeof window === "undefined" || !id) return;
-	const cic = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
-	if (typeof cic === "function") cic(id);
-	else clearTimeout(id);
-};
-
-const SiteGrid = memo(function SiteGrid({
-	sites,
-	cardMinWidth = "160px",
-	cardHeight = "64px",
-	cardGridPadding = "8px",
-	layout,
-}: {
-	sites: NavCategory["sites"];
-	cardMinWidth?: string;
-	cardHeight?: string;
-	cardGridPadding?: string;
-	layout?: Required<LayoutConfig>;
-}) {
-	const total = sites?.length ?? 0;
-	const needBatch = total > BATCH_THRESHOLD;
-	const [renderCount, setRenderCount] = useState(() =>
-		needBatch ? BATCH_INITIAL : total,
-	);
-
-	useEffect(() => {
-		// sites 变化时重置
-		setRenderCount(needBatch ? BATCH_INITIAL : total);
-	}, [needBatch, sites, total]);
-
-	useEffect(() => {
-		if (!needBatch || renderCount >= total) return;
-		const id = scheduleIdle(() => {
-			setRenderCount((c) => Math.min(c + BATCH_STEP, total));
-		});
-		return () => cancelIdle(id);
-	}, [needBatch, renderCount, total]);
-
-	if (!sites || total === 0) return null;
-	const visible = renderCount >= total ? sites : sites.slice(0, renderCount);
-
-	return (
-		<div style={{ padding: `8px ${cardGridPadding}` }}>
-			<div
-				className="grid gap-3"
-				style={{
-					gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`,
-					gridAutoRows: cardHeight,
-				}}
-			>
-				{visible.map((s) => (
-					<SiteCard key={`${s.title}-${s.url}`} site={s} layout={layout} />
-				))}
-			</div>
-		</div>
-	);
-});
 
 function EmptyHint() {
 	return (

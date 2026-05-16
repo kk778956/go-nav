@@ -28,6 +28,7 @@ export const DEFAULT_LAYOUT: Required<LayoutConfig> = {
 	cardGridPadding: "8px",
 	iconBorderRadius: "full",
 	defaultIconPadding: "",
+	linkTarget: "new",
 };
 
 const EMPTY_WEBSITE: WebsiteData = { categories: [] };

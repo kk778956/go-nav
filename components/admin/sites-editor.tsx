@@ -27,6 +27,7 @@ import {
 	BiPlus,
 	BiChevronUp,
 	BiChevronDown,
+	BiGlobe,
 } from "react-icons/bi";
 import type { NavCategory, WebsiteData, NavSite } from "@/types";
 import { useAtom, useAtomValue } from "jotai";
@@ -99,6 +100,7 @@ export function SitesEditor() {
 	const [editingSite, setEditingSite] = useState<NavSite | null>(null);
 	const [editingIndex, setEditingIndex] = useState<number>(-1);
 	const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+	const [fetchingInfo, setFetchingInfo] = useState(false);
 	const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() =>
 		collectExpandableIds(categories),
 	);
@@ -246,6 +248,75 @@ export function SitesEditor() {
 		setEditingIndex(-1);
 	};
 
+	const fetchWebsiteInfo = async () => {
+		if (!editingSite?.url?.trim()) {
+			toast.warning("请先输入网站地址");
+			return;
+		}
+		setFetchingInfo(true);
+		try {
+			const res = await fetch("/api/fetch-website", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url: editingSite.url }),
+			});
+			if (!res.ok) {
+				const data = (await res.json().catch(() => ({}))) as { error?: string };
+				throw new Error(data.error || "获取失败");
+			}
+			const data = (await res.json()) as {
+				title?: string;
+				faviconUrl?: string | null;
+				description?: string;
+				keywords?: string[];
+			};
+
+			setEditingSite((prev) => {
+				if (!prev) return prev;
+				const updated = { ...prev };
+				if (data.title && !updated.title) {
+					updated.title = data.title;
+				}
+				if (data.description && !updated.description) {
+					updated.description = data.description;
+				}
+				if (
+					data.keywords &&
+					data.keywords.length > 0 &&
+					(!updated.tags || updated.tags.length === 0)
+				) {
+					updated.tags = data.keywords.slice(0, 5);
+				}
+				return updated;
+			});
+
+			if (data.faviconUrl) {
+				try {
+					const uploadRes = await fetch("/api/tools/uploadFavicon", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ faviconUrl: data.faviconUrl }),
+					});
+					if (uploadRes.ok) {
+						const uploadData = (await uploadRes.json()) as { url: string };
+						setEditingSite((prev) => {
+							if (!prev) return prev;
+							return { ...prev, icon: uploadData.url };
+						});
+					}
+				} catch {
+					// 图标上传失败，不影响其他信息
+				}
+			}
+
+			toast.success("网站信息获取成功");
+		} catch (e) {
+			toast.warning((e as Error).message || "获取网站信息失败");
+		} finally {
+			setFetchingInfo(false);
+		}
+	};
+
 	const deleteSite = (index: number) => {
 		const site = currentSites[index];
 		updateSites((sites) => sites.filter((_, i) => i !== index));
@@ -301,7 +372,9 @@ export function SitesEditor() {
 		const iconSrc = getIconImageSrc(icon);
 		if (iconSrc) {
 			// eslint-disable-next-line @next/next/no-img-element
-			return <img src={iconSrc} alt="" className="h-5 w-5 rounded object-contain" />;
+			return (
+				<img src={iconSrc} alt="" className="h-5 w-5 rounded object-contain" />
+			);
 		}
 		return <span className="w-5 text-center text-base">{icon}</span>;
 	};
@@ -513,9 +586,10 @@ export function SitesEditor() {
 																	<div
 																		className="flex h-8 w-8 items-center justify-center rounded-lg"
 																		style={{
-																			backgroundColor: resolveSiteBackgroundColor(
-																				site.bgColor,
-																			),
+																			backgroundColor:
+																				resolveSiteBackgroundColor(
+																					site.bgColor,
+																				),
 																			padding:
 																				toPx(getResolvedIconPadding(site)) ||
 																				undefined,
@@ -695,6 +769,29 @@ export function SitesEditor() {
 										</span>
 									</div>
 									<TextField
+										value={editingSite?.url ?? ""}
+										onChange={(v) =>
+											setEditingSite({ ...editingSite!, url: v })
+										}
+									>
+										<Label>网站地址</Label>
+										<InputGroup>
+											<InputGroup.Input placeholder="https://..." />
+											<InputGroup.Suffix className="p-1!">
+												<Button
+													size="sm"
+													variant="tertiary"
+													className={"rounded-lg"}
+													isDisabled={fetchingInfo}
+													onPress={fetchWebsiteInfo}
+												>
+													<BiGlobe className="size-4" />
+													获取信息
+												</Button>
+											</InputGroup.Suffix>
+										</InputGroup>
+									</TextField>
+									<TextField
 										value={editingSite?.title ?? ""}
 										onChange={(v) =>
 											setEditingSite({ ...editingSite!, title: v })
@@ -702,15 +799,6 @@ export function SitesEditor() {
 									>
 										<Label>网站名称</Label>
 										<Input placeholder="例如：GitHub" />
-									</TextField>
-									<TextField
-										value={editingSite?.url ?? ""}
-										onChange={(v) =>
-											setEditingSite({ ...editingSite!, url: v })
-										}
-									>
-										<Label>网站地址</Label>
-										<Input placeholder="https://..." />
 									</TextField>
 									<TextField
 										value={editingSite?.description ?? ""}

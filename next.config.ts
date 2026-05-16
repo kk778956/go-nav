@@ -17,7 +17,9 @@ const pageExtensions = isStatic
 
 const nextConfig: NextConfig = {
 	// 静态模式开启 export，生成 out/；动态模式生成 standalone，便于 Docker 部署
-	...(isStatic ? { output: "export" as const } : { output: "standalone" as const }),
+	...(isStatic
+		? { output: "export" as const }
+		: { output: "standalone" as const }),
 	trailingSlash: true,
 	assetPrefix: "/",
 	reactCompiler: true,

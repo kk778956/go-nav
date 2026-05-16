@@ -90,6 +90,7 @@ export const DEFAULT_NAV: NavConfig = {
 		showFloatingQrCode: true,
 		showFloatingActions: true,
 		defaultIconPadding: "8",
+		linkTarget: "new",
 	},
 	adsAspectRatio: "4/3",
 };

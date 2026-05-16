@@ -1,46 +1,47 @@
 "use client";
 
 import {
-	Button,
-	ListBox,
-	Separator,
-	Header,
-	Label,
-	Drawer,
-	Breadcrumbs,
-	type Selection,
-	Card,
-	toast,
-	Link,
-	useOverlayState,
+    Button,
+    ListBox,
+    Separator,
+    Header,
+    Label,
+    Drawer,
+    Breadcrumbs,
+    type Selection,
+    Card,
+    toast,
+    Link,
+    useOverlayState,
 } from "@heroui/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import {
-	BiCog,
-	BiGlobe,
-	BiGrid,
-	BiLogOut,
-	BiSave,
-	BiSearch,
-	BiStar,
-	BiShow,
-	BiMenu,
-	BiLayout,
-	BiPalette,
-	BiBookContent,
-	BiArchive,
-	BiCode,
-	BiDonateHeart,
-	BiImport,
+    BiCog,
+    BiGlobe,
+    BiGrid,
+    BiLogOut,
+    BiSave,
+    BiSearch,
+    BiStar,
+    BiShow,
+    BiMenu,
+    BiLayout,
+    BiPalette,
+    BiBookContent,
+    BiArchive,
+    BiCode,
+    BiDonateHeart,
+    BiImport,
+    BiFile,
 } from "react-icons/bi";
 import {
-	applyImportAtom,
-	dirtyAtom,
-	navFieldAtom,
-	saveAtom,
-	savingAtom,
+    applyImportAtom,
+    dirtyAtom,
+    navFieldAtom,
+    saveAtom,
+    savingAtom,
 } from "@/lib/store/admin";
 import { getIconImageSrc } from "@/lib/icon";
 import type { NavConfig, WebsiteData } from "@/types";
@@ -58,7 +59,8 @@ type RouteKey =
 	| "plugins"
 	| "donation"
 	| "backup"
-	| "import";
+	| "import"
+	| "source-file";
 
 interface NavItem {
 	key: RouteKey;
@@ -88,6 +90,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 				label: "从外部导入",
 				icon: <BiImport className="size-5" />,
 				desc: "导入浏览器书签并自动解析分类",
+			},
+			{
+				key: "source-file",
+				label: "编辑源文件",
+				icon: <BiFile className="size-5" />,
+				desc: "直接编辑 website.json 源文件",
 			},
 		],
 	},

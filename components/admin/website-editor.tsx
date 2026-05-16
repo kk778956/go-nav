@@ -1,12 +1,12 @@
 "use client";
 
 import {
-	Button,
-	Input,
-	Label,
-	Separator,
-	Switch,
-	TextField,
+    Button,
+    Input,
+    Label,
+    Separator,
+    Switch,
+    TextField,
 } from "@heroui/react";
 import { BiSun, BiMoon, BiDesktop } from "react-icons/bi";
 import type { LayoutConfig, ThemeMode, NavConfig } from "@/types";
@@ -357,6 +357,9 @@ function LayoutEditor({
 		) {
 			return false;
 		}
+		if (key === "linkTarget") {
+			return getLayoutValue(key) === "new";
+		}
 
 		return Boolean(getLayoutValue(key));
 	};
@@ -371,6 +374,9 @@ function LayoutEditor({
 		}
 		if (key === "showCategoryTitle" && !value) {
 			next.showCategoryDescription = false;
+		}
+		if (key === "linkTarget") {
+			next.linkTarget = value ? "new" : "current";
 		}
 
 		patch(next);
@@ -400,6 +406,10 @@ function LayoutEditor({
 			label: "页脚显示二维码",
 			key: "showFooterQrCode",
 			disabled: !getLayoutValue("showFooter"),
+		},
+		{
+			label: "新标签页打开链接",
+			key: "linkTarget",
 		},
 	];
 

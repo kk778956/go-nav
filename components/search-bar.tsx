@@ -3,13 +3,13 @@
 import type { Key } from "@heroui/react";
 import { EmptyState, Label, ListBox, SearchField, Select } from "@heroui/react";
 import {
-	useCallback,
-	useDeferredValue,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	useTransition,
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    useTransition,
 } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { LayoutConfig, NavSite, SearchEngine } from "@/types";
@@ -54,7 +54,7 @@ export function SearchBar({
 	engineId?: Key | null;
 	onEngineChange?: (id: Key | null) => void;
 	showEngineSelector?: boolean;
-	layout?: Pick<LayoutConfig, "defaultIconPadding" | "iconBorderRadius">;
+	layout?: Pick<LayoutConfig, "defaultIconPadding" | "iconBorderRadius" | "linkTarget">;
 }) {
 	const engineOptions = useMemo(() => {
 		const base: SearchEngine[] = [];
@@ -334,13 +334,21 @@ export function SearchBar({
 		const engine = engines.find((e) => e.id === engineId);
 		if (!engine) return;
 		const url = engine.url.replace("{query}", encodeURIComponent(q));
-		window.open(url, "_blank", "noopener,noreferrer");
+		if (layout?.linkTarget === "current") {
+			window.location.href = url;
+		} else {
+			window.open(url, "_blank", "noopener,noreferrer");
+		}
 	};
 
 	const openLocalResult = (r: (typeof results)[number]) => {
 		onNavigate?.(r.categoryId);
 		recordVisit(r);
-		window.open(r.url, "_blank", "noopener,noreferrer");
+		if (layout?.linkTarget === "current") {
+			window.location.href = r.url;
+		} else {
+			window.open(r.url, "_blank", "noopener,noreferrer");
+		}
 		setIsOpen(false);
 	};
 

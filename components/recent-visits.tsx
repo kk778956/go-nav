@@ -13,15 +13,24 @@ function parseCssSizeToPx(value: string, fallback = 16) {
 	return n;
 }
 
-/**
- * 最近访问组件。
- *
- * 状态就近管理：visits / clearVisits / mounted 只在本组件内部使用，
- * 直接通过 useRecentVisits 在内部获取，避免 visits 变化触发外层
- * AppLayout 重渲染。
- *
- * 外部 memo 包裹，避免样式类 props 未变时因父级重渲染被牊连。
- */
+const MAX_ROWS_CAP = 5;
+const GRID_GAP = 12;
+
+const ROW_BREAKPOINTS: { min: number; rows: number }[] = [
+	{ min: 1400, rows: 1 },
+	{ min: 1000, rows: 2 },
+	{ min: 700, rows: 3 },
+	{ min: 450, rows: 4 },
+	{ min: 0, rows: 5 },
+];
+
+function getMaxRows(width: number): number {
+	for (const bp of ROW_BREAKPOINTS) {
+		if (width >= bp.min) return bp.rows;
+	}
+	return MAX_ROWS_CAP;
+}
+
 export const RecentVisits = memo(function RecentVisits({
 	maxItems = 20,
 	cardMinWidth = "160px",
@@ -35,29 +44,57 @@ export const RecentVisits = memo(function RecentVisits({
 	cardMinWidth?: string;
 	cardHeight?: string;
 	cardGridPadding?: string;
-	/** 与 CategorySection 之间的间距，用于高度过渡计算 */
 	sectionGap?: string;
-	/** 延迟显示时间（毫秒），默认 150ms */
 	delay?: number;
 	layout?: Required<LayoutConfig>;
 }) {
 	const { visits, clearVisits, mounted } = useRecentVisits();
 	const innerRef = useRef<HTMLDivElement>(null);
+	const gridRef = useRef<HTMLDivElement>(null);
 	const [height, setHeight] = useState("0px");
 	const [visible, setVisible] = useState(false);
+	const [displayCount, setDisplayCount] = useState(0);
 
-	// 延迟显示，避免页面加载时突然跳动
+	const hasData = visits.length > 0;
+	const displayVisits = visits.slice(0, maxItems);
+	const totalItems = displayVisits.length;
+	const gapPx = parseCssSizeToPx(sectionGap);
+	const minCardWidthPx = parseCssSizeToPx(cardMinWidth);
+
 	useEffect(() => {
 		const timer = setTimeout(() => setVisible(true), delay);
 		return () => clearTimeout(timer);
 	}, [delay]);
 
-	// sectionGap 解析为数值，兼容 "16px" / "1rem" 等（rem 简化为 * 16）
-	const gapPx = parseCssSizeToPx(sectionGap);
-
-	// 使用 ResizeObserver 自动跟踪内容高度变化，替代 resize 事件 + setTimeout
 	useEffect(() => {
-		if (!mounted || !visible) return; // 延迟期间不计算高度
+		if (!mounted || !visible) return;
+		const el = gridRef.current;
+		if (!el || totalItems === 0) return;
+
+		const update = () => {
+			const width = el.clientWidth;
+			if (width === 0) return;
+
+			const cols = Math.max(
+				1,
+				Math.floor((width + GRID_GAP) / (minCardWidthPx + GRID_GAP)),
+			);
+			const rows = Math.ceil(totalItems / cols);
+
+			const maxRows = getMaxRows(width);
+			const capped = rows > maxRows ? cols * maxRows : totalItems;
+
+			setDisplayCount((prev) => (prev === capped ? prev : capped));
+		};
+
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [mounted, visible, totalItems, minCardWidthPx]);
+
+	useEffect(() => {
+		if (!mounted || !visible) return;
 		const el = innerRef.current;
 		if (!el) return;
 
@@ -70,20 +107,19 @@ export const RecentVisits = memo(function RecentVisits({
 		return () => observer.disconnect();
 	}, [mounted, visible, gapPx]);
 
-	// visits 变化时也需重新计算（ResizeObserver 不一定能捕获子元素数量变化导致的高度变化）
 	useEffect(() => {
-		if (!mounted || !visible) return; // 延迟期间不计算高度
+		if (!mounted || !visible) return;
 		const el = innerRef.current;
 		if (el) {
 			const h = el.scrollHeight + gapPx;
 			const next = `${h}px`;
 			setHeight((prev) => (prev === next ? prev : next));
 		}
-	}, [mounted, visible, visits.length, gapPx]);
+	}, [mounted, visible, visits.length, gapPx, displayCount]);
 
-	// 数据检查（即使在延迟期间也计算，确保高度正确）
-	const hasData = visits.length > 0;
-	const displayVisits = visits.slice(0, maxItems);
+	const visibleVisits = displayCount > 0
+		? displayVisits.slice(0, displayCount)
+		: displayVisits;
 
 	if (!mounted || !hasData) return null;
 
@@ -113,13 +149,14 @@ export const RecentVisits = memo(function RecentVisits({
 					</div>
 					<div style={{ padding: `8px ${cardGridPadding}` }}>
 						<div
+							ref={gridRef}
 							className="grid gap-3"
 							style={{
 								gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`,
 								gridAutoRows: cardHeight,
 							}}
 						>
-							{displayVisits.map((v) => (
+							{visibleVisits.map((v) => (
 								<SiteCard
 									key={`${v.url}::${v.title}`}
 									site={v}

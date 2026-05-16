@@ -80,7 +80,8 @@
     "showFooterQrCode": true,
     "showFloatingQrCode": true,
     "showFloatingActions": true,
-    "defaultIconPadding": "8"
+    "defaultIconPadding": "8",
+    "linkTarget": "current"
   },
   "adsAspectRatio": "4/3"
 }

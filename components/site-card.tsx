@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import type { LayoutConfig, NavSite } from "@/types";
 import { recordVisit } from "@/hooks/use-recent-visits";
 import { SiteIcon } from "./site-icon";
@@ -11,20 +11,16 @@ export {
 	toPx,
 } from "./site-icon";
 
-/** SiteCard 接受的站点数据，description 可选以兼容 RecentVisit */
 export interface SiteCardData {
 	url: string;
 	title: string;
 	icon?: string;
 	description?: string;
 	tags?: string[];
+	bgColor?: string;
+	iconPadding?: string;
 }
 
-/**
- * 通用网站卡片 - 同时用于分类网格和最近访问
- * 大量渲染场景（>1 万）下：移除 useCallback / 子 memo 子组件，
- * 减少每个实例的 hook slot 与额外函数组件实例。
- */
 export const SiteCard = memo(function SiteCard({
 	site,
 	trackVisit = true,
@@ -34,11 +30,13 @@ export const SiteCard = memo(function SiteCard({
 	trackVisit?: boolean;
 	layout?: Required<LayoutConfig>;
 }) {
+	const target = layout?.linkTarget === "current" ? undefined : "_blank";
+	const rel = target ? "noopener noreferrer" : undefined;
 	return (
 		<a
 			href={site.url}
-			target="_blank"
-			rel="noopener noreferrer"
+			target={target}
+			rel={rel}
 			aria-label={site.title}
 			onClick={trackVisit ? () => recordVisit(site as NavSite) : undefined}
 			className="group flex transform-gpu items-center gap-3 rounded-xl bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-zinc-800 [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:bg-white [@media(hover:hover)]:hover:shadow-[0_12px_28px_rgba(15,23,42,0.11)] active:translate-y-0 active:scale-[0.99] dark:[@media(hover:hover)]:hover:bg-zinc-800"
@@ -57,5 +55,77 @@ export const SiteCard = memo(function SiteCard({
 				</div>
 			</div>
 		</a>
+	);
+});
+
+const BATCH_THRESHOLD = 80;
+const BATCH_INITIAL = 60;
+const BATCH_STEP = 80;
+
+const scheduleIdle = (cb: () => void) => {
+	if (typeof window === "undefined") return 0;
+	const ric = (window as unknown as { requestIdleCallback?: (cb: IdleRequestCallback, opts?: { timeout: number }) => number }).requestIdleCallback;
+	if (typeof ric === "function") {
+		return ric(() => cb(), { timeout: 300 });
+	}
+	return window.setTimeout(cb, 50) as unknown as number;
+};
+const cancelIdle = (id: number) => {
+	if (typeof window === "undefined" || !id) return;
+	const cic = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+	if (typeof cic === "function") cic(id);
+	else clearTimeout(id);
+};
+
+export const SiteGrid = memo(function SiteGrid({
+	sites,
+	cardMinWidth = "160px",
+	cardHeight = "64px",
+	cardGridPadding = "8px",
+	trackVisit = true,
+	layout,
+}: {
+	sites?: SiteCardData[];
+	cardMinWidth?: string;
+	cardHeight?: string;
+	cardGridPadding?: string;
+	trackVisit?: boolean;
+	layout?: Required<LayoutConfig>;
+}) {
+	const total = sites?.length ?? 0;
+	const needBatch = total > BATCH_THRESHOLD;
+	const [renderCount, setRenderCount] = useState(() =>
+		needBatch ? BATCH_INITIAL : total,
+	);
+
+	useEffect(() => {
+		setRenderCount(needBatch ? BATCH_INITIAL : total);
+	}, [needBatch, sites, total]);
+
+	useEffect(() => {
+		if (!needBatch || renderCount >= total) return;
+		const id = scheduleIdle(() => {
+			setRenderCount((c) => Math.min(c + BATCH_STEP, total));
+		});
+		return () => cancelIdle(id);
+	}, [needBatch, renderCount, total]);
+
+	if (!sites || total === 0) return null;
+	const visible = renderCount >= total ? sites : sites.slice(0, renderCount);
+
+	return (
+		<div style={{ padding: `8px ${cardGridPadding}` }}>
+			<div
+				className="grid gap-3"
+				style={{
+					gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`,
+					gridAutoRows: cardHeight,
+				}}
+			>
+				{visible.map((s) => (
+					<SiteCard key={`${s.title}-${s.url}`} site={s} trackVisit={trackVisit} layout={layout} />
+				))}
+			</div>
+		</div>
 	);
 });

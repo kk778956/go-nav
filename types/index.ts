@@ -46,6 +46,8 @@ export interface LayoutConfig {
 	iconBorderRadius?: string;
 	/** 网站图标默认内边距，如 "8px"、"6px" */
 	defaultIconPadding?: string;
+	/** 链接打开方式："current" 当前页打开，"new" 新标签页打开 */
+	linkTarget?: "current" | "new";
 }
 
 /**

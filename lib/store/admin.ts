@@ -274,3 +274,17 @@ export const applyImportAtom = atom(
 		if (payload.websiteData || payload.nav) set(dirtyAtom, true);
 	},
 );
+
+export const syncDataWithoutDirtyAtom = atom(
+	null,
+	(_get, set, payload: { websiteData?: WebsiteData; nav?: NavConfig }) => {
+		if (payload.websiteData) {
+			set(_websiteDataBaseAtom, payload.websiteData);
+			set(_savedWebsiteDataAtom, payload.websiteData);
+		}
+		if (payload.nav) {
+			set(_navBaseAtom, payload.nav);
+			set(_savedNavAtom, payload.nav);
+		}
+	},
+);

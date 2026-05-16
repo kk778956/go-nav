@@ -12,6 +12,8 @@ export interface RecentVisit {
 	title: string;
 	icon?: string;
 	description?: string;
+	bgColor?: string;
+	iconPadding?: string;
 	timestamp: number;
 }
 
@@ -60,6 +62,8 @@ export function recordVisit(site: NavSite) {
 		title: site.title,
 		icon: site.icon,
 		description: site.description,
+		bgColor: site.bgColor,
+		iconPadding: site.iconPadding,
 		timestamp: Date.now(),
 	};
 	const next = [entry, ...filtered].slice(0, MAX_ITEMS);
