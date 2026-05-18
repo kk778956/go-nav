@@ -1,0 +1,948 @@
+"use client";
+
+import {
+	Button,
+	Checkbox,
+	CheckboxGroup,
+	Chip,
+	InputGroup,
+	Label,
+	ProgressBar,
+	Spinner,
+	Table,
+	TableLayout,
+	TextField,
+	toast,
+	Virtualizer,
+} from "@heroui/react";
+import { useAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	BiGlobe,
+	BiPause,
+	BiPlay,
+	BiRefresh,
+	BiSearch,
+	BiTrash,
+} from "react-icons/bi";
+import { categoriesAtom } from "@/lib/store/admin";
+import type { NavCategory, NavSite } from "@/types";
+import { getIconImageSrc } from "@/lib/icon";
+import { resolveSiteBackgroundColor, toPx } from "@/components/site-icon";
+
+type BatchStatus = "idle" | "running" | "pausing" | "paused" | "finished";
+type RowStatus = "pending" | "running" | "success" | "failure";
+type BatchUpdateField = "title" | "description" | "icon";
+
+interface BatchStats {
+	processed: number;
+	success: number;
+	failure: number;
+}
+
+interface BatchSiteRow {
+	key: string;
+	statusKey: string;
+	categoryId: string;
+	categoryPath: string;
+	siteIndex: number;
+	title: string;
+	url: string;
+	description?: string;
+	icon?: string;
+	bgColor?: string;
+	iconPadding?: string;
+	hasDescription: boolean;
+	hasIcon: boolean;
+}
+
+type SitePatch = Partial<
+	Pick<NavSite, "title" | "description" | "icon" | "bgColor" | "iconPadding">
+>;
+
+const UPDATE_FIELD_OPTIONS: Array<{
+	value: BatchUpdateField;
+	label: string;
+}> = [
+	{ value: "title", label: "名称" },
+	{ value: "description", label: "描述" },
+	{ value: "icon", label: "图标" },
+];
+
+const DEFAULT_UPDATE_FIELDS = UPDATE_FIELD_OPTIONS.map(
+	(option) => option.value,
+);
+
+const TABLE_COLUMN_WIDTHS = {
+	icon: 60,
+	title: 140,
+	description: 240,
+	url: 240,
+	category: 160,
+	fields: 180,
+	status: 100,
+	actions: 76,
+} as const;
+
+const TABLE_MIN_WIDTH = Object.values(TABLE_COLUMN_WIDTHS).reduce(
+	(total, width) => total + width,
+	0,
+);
+
+const TABLE_COLUMN_WIDTH_MAP = new Map<string, number>(
+	Object.entries(TABLE_COLUMN_WIDTHS),
+);
+
+function normalizeUpdateFields(values: string[]) {
+	return UPDATE_FIELD_OPTIONS.filter((option) =>
+		values.includes(option.value),
+	).map((option) => option.value);
+}
+
+const EMPTY_STATS: BatchStats = {
+	processed: 0,
+	success: 0,
+	failure: 0,
+};
+
+function createRowKey(categoryId: string, siteIndex: number, url: string) {
+	return `${categoryId}:${siteIndex}:${url}`;
+}
+
+function createRowStatusKey(categoryId: string, siteIndex: number) {
+	return `${categoryId}:${siteIndex}`;
+}
+
+function collectSiteRows(categories: NavCategory[]) {
+	const rows: BatchSiteRow[] = [];
+	const walk = (items: NavCategory[], path: string[]) => {
+		for (const category of items) {
+			const nextPath = [...path, category.name];
+			for (const [siteIndex, site] of (category.sites ?? []).entries()) {
+				rows.push({
+					key: createRowKey(category.id, siteIndex, site.url),
+					statusKey: createRowStatusKey(category.id, siteIndex),
+					categoryId: category.id,
+					categoryPath: nextPath.join(" / "),
+					siteIndex,
+					title: site.title,
+					url: site.url,
+					description: site.description,
+					icon: site.icon,
+					bgColor: site.bgColor,
+					iconPadding: site.iconPadding,
+					hasDescription: Boolean(site.description?.trim()),
+					hasIcon: Boolean(site.icon?.trim()),
+				});
+			}
+			if (category.children?.length) {
+				walk(category.children, nextPath);
+			}
+		}
+	};
+	walk(categories, []);
+	return rows;
+}
+
+function patchSiteInCategories(
+	categories: NavCategory[],
+	row: BatchSiteRow,
+	patch: SitePatch,
+): { categories: NavCategory[]; patched: boolean } {
+	let patched = false;
+	const nextCategories = categories.map((category) => {
+		if (category.id === row.categoryId) {
+			const sites = category.sites ?? [];
+			if (!sites[row.siteIndex]) return category;
+			const nextSites = sites.slice();
+			nextSites[row.siteIndex] = {
+				...nextSites[row.siteIndex],
+				...patch,
+			};
+			patched = true;
+			return { ...category, sites: nextSites };
+		}
+		if (category.children?.length) {
+			const childResult = patchSiteInCategories(category.children, row, patch);
+			if (childResult.patched) {
+				patched = true;
+				return { ...category, children: childResult.categories };
+			}
+		}
+		return category;
+	});
+	return { categories: nextCategories, patched };
+}
+
+async function fetchWebsitePatch(
+	url: string,
+	updateFields: BatchUpdateField[],
+) {
+	if (!url.trim()) {
+		throw new Error("缺少网站地址");
+	}
+
+	const res = await fetch("/api/fetch-website", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ url }),
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => ({}))) as { error?: string };
+		throw new Error(data.error || "获取失败");
+	}
+
+	const data = (await res.json()) as {
+		title?: string;
+		faviconUrl?: string | null;
+		description?: string;
+	};
+	const patch: SitePatch = {};
+	const fields: string[] = [];
+	const title = data.title?.trim();
+	const description = data.description?.trim();
+	const shouldUpdateTitle = updateFields.includes("title");
+	const shouldUpdateDescription = updateFields.includes("description");
+	const shouldUpdateIcon = updateFields.includes("icon");
+
+	if (shouldUpdateTitle && title) {
+		patch.title = title;
+		fields.push("名称");
+	}
+	if (shouldUpdateDescription && description) {
+		patch.description = description;
+		fields.push("描述");
+	}
+	if (shouldUpdateIcon && data.faviconUrl) {
+		try {
+			const uploadRes = await fetch("/api/tools/uploadFavicon", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ faviconUrl: data.faviconUrl }),
+			});
+			if (uploadRes.ok) {
+				const uploadData = (await uploadRes.json()) as { url?: string };
+				if (uploadData.url) {
+					patch.icon = uploadData.url;
+					fields.push("图标");
+				}
+			}
+		} catch {
+			// 图标下载失败时仍保留名称、描述等已获取信息。
+		}
+	}
+
+	if (fields.length === 0) {
+		throw new Error("未获取到选中字段的可更新信息");
+	}
+
+	return { patch, fields };
+}
+
+export function BatchOperationsEditor() {
+	const [categories, setCategories] = useAtom(categoriesAtom);
+	const allRows = useMemo(() => collectSiteRows(categories), [categories]);
+	const allRowsSignature = useMemo(
+		() => allRows.map((row) => row.key).join("|"),
+		[allRows],
+	);
+	const [queueRows, setQueueRows] = useState<BatchSiteRow[]>(() =>
+		collectSiteRows(categories),
+	);
+	const [rowStatusMap, setRowStatusMap] = useState<Record<string, RowStatus>>(
+		{},
+	);
+	const [rowErrorMap, setRowErrorMap] = useState<Record<string, string>>({});
+	const [status, setStatus] = useState<BatchStatus>("idle");
+	const [stats, setStats] = useState<BatchStats>(EMPTY_STATS);
+	const [search, setSearch] = useState("");
+	const [selectedFields, setSelectedFields] = useState<string[]>(
+		DEFAULT_UPDATE_FIELDS,
+	);
+	const [isClientReady, setIsClientReady] = useState(false);
+	const [activeRow, setActiveRow] = useState<BatchSiteRow | null>(null);
+	const categoriesRef = useRef(categories);
+	const queueRowsRef = useRef(queueRows);
+	const rowStatusRef = useRef(rowStatusMap);
+	const rowErrorRef = useRef(rowErrorMap);
+	const statsRef = useRef<BatchStats>(EMPTY_STATS);
+	const pauseRequestedRef = useRef(false);
+	const runningRef = useRef(false);
+	const sourceSignatureRef = useRef(allRowsSignature);
+	const selectedUpdateFields = useMemo(
+		() => normalizeUpdateFields(selectedFields),
+		[selectedFields],
+	);
+
+	useEffect(() => {
+		categoriesRef.current = categories;
+	}, [categories]);
+
+	useEffect(() => {
+		queueRowsRef.current = queueRows;
+	}, [queueRows]);
+
+	useEffect(() => {
+		rowStatusRef.current = rowStatusMap;
+	}, [rowStatusMap]);
+
+	useEffect(() => {
+		rowErrorRef.current = rowErrorMap;
+	}, [rowErrorMap]);
+
+	useEffect(() => {
+		setIsClientReady(true);
+	}, []);
+
+	const resetProgress = useCallback(() => {
+		rowStatusRef.current = {};
+		rowErrorRef.current = {};
+		statsRef.current = EMPTY_STATS;
+		setRowStatusMap({});
+		setRowErrorMap({});
+		setStats(EMPTY_STATS);
+		setActiveRow(null);
+	}, []);
+
+	useEffect(() => {
+		if (sourceSignatureRef.current === allRowsSignature) return;
+		sourceSignatureRef.current = allRowsSignature;
+		if (runningRef.current) return;
+		queueRowsRef.current = allRows;
+		setQueueRows(allRows);
+		setSearch("");
+		setStatus("idle");
+		resetProgress();
+	}, [allRows, allRowsSignature, resetProgress]);
+
+	const setRowStatus = useCallback((key: string, nextStatus: RowStatus) => {
+		const next = { ...rowStatusRef.current, [key]: nextStatus };
+		rowStatusRef.current = next;
+		setRowStatusMap(next);
+		// Force virtualized row re-render: some table virtualizers only refresh when row item object changes.
+		const nextQueue = queueRowsRef.current.map((item) =>
+			item.statusKey === key ? { ...item } : item,
+		);
+		queueRowsRef.current = nextQueue;
+		setQueueRows(nextQueue);
+	}, []);
+
+	const setRowError = useCallback((key: string, error: string | null) => {
+		const next = { ...rowErrorRef.current };
+		if (error) {
+			next[key] = error;
+		} else {
+			delete next[key];
+		}
+		rowErrorRef.current = next;
+		setRowErrorMap(next);
+	}, []);
+
+	const updateQueueRow = useCallback((row: BatchSiteRow, patch: SitePatch) => {
+		const nextQueue = queueRowsRef.current.map((item) => {
+			if (item.key !== row.key) return item;
+			return {
+				...item,
+				title: patch.title ?? item.title,
+				description: patch.description ?? item.description,
+				icon: patch.icon ?? item.icon,
+				bgColor: patch.bgColor ?? item.bgColor,
+				iconPadding: patch.iconPadding ?? item.iconPadding,
+				hasDescription: item.hasDescription || Boolean(patch.description),
+				hasIcon: item.hasIcon || Boolean(patch.icon),
+			};
+		});
+		queueRowsRef.current = nextQueue;
+		setQueueRows(nextQueue);
+	}, []);
+
+	const applyPatch = useCallback(
+		(row: BatchSiteRow, patch: SitePatch) => {
+			const result = patchSiteInCategories(categoriesRef.current, row, patch);
+			if (!result.patched) return false;
+			categoriesRef.current = result.categories;
+			setCategories(result.categories);
+			updateQueueRow(row, patch);
+			return true;
+		},
+		[setCategories, updateQueueRow],
+	);
+
+	const removeRow = (row: BatchSiteRow) => {
+		const nextQueue = queueRowsRef.current.filter(
+			(item) => item.key !== row.key,
+		);
+		const nextStatusMap = { ...rowStatusRef.current };
+		const nextErrorMap = { ...rowErrorRef.current };
+		delete nextStatusMap[row.statusKey];
+		delete nextErrorMap[row.statusKey];
+		queueRowsRef.current = nextQueue;
+		rowStatusRef.current = nextStatusMap;
+		rowErrorRef.current = nextErrorMap;
+		setQueueRows(nextQueue);
+		setRowStatusMap(nextStatusMap);
+		setRowErrorMap(nextErrorMap);
+	};
+
+	const restoreAllRows = () => {
+		if (runningRef.current) return;
+		queueRowsRef.current = allRows;
+		setQueueRows(allRows);
+		setSearch("");
+		setStatus("idle");
+		resetProgress();
+	};
+
+	const runBatch = useCallback(
+		async (resetBeforeRun: boolean) => {
+			if (runningRef.current) return;
+			const currentQueue = queueRowsRef.current;
+			if (currentQueue.length === 0) {
+				toast.warning("待更新列表为空");
+				return;
+			}
+			if (selectedUpdateFields.length === 0) {
+				toast.warning("请至少选择一项更新信息");
+				return;
+			}
+
+			runningRef.current = true;
+			pauseRequestedRef.current = false;
+			setStatus("running");
+
+			if (resetBeforeRun) {
+				resetProgress();
+			}
+
+			for (const row of queueRowsRef.current) {
+				if (pauseRequestedRef.current) break;
+				const currentRowStatus = rowStatusRef.current[row.statusKey] ?? "pending";
+				if (currentRowStatus === "success" || currentRowStatus === "failure") {
+					continue;
+				}
+
+				setActiveRow(row);
+				setRowStatus(row.statusKey, "running");
+
+				try {
+					const { patch } = await fetchWebsitePatch(
+						row.url,
+						selectedUpdateFields,
+					);
+					const patched = applyPatch(row, patch);
+					if (!patched) {
+						throw new Error("网址位置已变化");
+					}
+					statsRef.current = {
+						processed: statsRef.current.processed + 1,
+						success: statsRef.current.success + 1,
+						failure: statsRef.current.failure,
+					};
+					setRowError(row.statusKey, null);
+					setRowStatus(row.statusKey, "success");
+				} catch (e) {
+					const message = e instanceof Error ? e.message : "获取失败";
+					statsRef.current = {
+						processed: statsRef.current.processed + 1,
+						success: statsRef.current.success,
+						failure: statsRef.current.failure + 1,
+					};
+					setRowError(row.statusKey, message);
+					setRowStatus(row.statusKey, "failure");
+				}
+				setStats(statsRef.current);
+			}
+
+			runningRef.current = false;
+			setActiveRow(null);
+
+			if (pauseRequestedRef.current) {
+				setStatus("paused");
+				return;
+			}
+
+			setStatus("finished");
+			toast.success("批量更新完成，记得点击保存");
+		},
+		[applyPatch, resetProgress, selectedUpdateFields, setRowError, setRowStatus],
+	);
+
+	const pauseBatch = () => {
+		if (!runningRef.current) return;
+		pauseRequestedRef.current = true;
+		setStatus("pausing");
+	};
+
+	const total = queueRows.length;
+	const removedCount = Math.max(allRows.length - queueRows.length, 0);
+	const isRunning = status === "running" || status === "pausing";
+	const canEditQueue = status === "idle" || status === "paused";
+	const progressValue = total > 0 ? stats.processed : 0;
+	const statusText =
+		status === "running"
+			? "更新中"
+			: status === "pausing"
+				? "暂停中"
+				: status === "paused"
+					? "已暂停"
+					: status === "finished"
+						? "已完成"
+						: "未开始";
+	const filteredRows = useMemo(() => {
+		const q = search.trim().toLowerCase();
+		if (!q) return queueRows;
+		return queueRows.filter(
+			(row) =>
+				row.title.toLowerCase().includes(q) ||
+				row.url.toLowerCase().includes(q) ||
+				row.categoryPath.toLowerCase().includes(q),
+		);
+	}, [queueRows, search]);
+
+	if (!isClientReady) {
+		return (
+			<div
+				className="flex flex-col items-center justify-center gap-2"
+				style={{
+					height: `calc(100dvh - 106px)`,
+				}}
+			>
+				<Spinner size="sm" />
+				<span className="text-xs text-default-500">加载中...</span>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex min-h-[calc(100dvh-106px)] flex-col gap-4">
+			<div className="flex items-center gap-2 rounded-lg border border-default bg-default/20 px-3 py-2 text-xs">
+				{activeRow ? (
+					<>
+						<Spinner size="sm" />
+						<BiGlobe className="size-4 shrink-0 text-default-500" />
+						<span className="shrink-0 font-medium">正在更新</span>
+						<span className="min-w-0 truncate font-medium">
+							{activeRow.title || activeRow.url}
+						</span>
+						<span className="hidden min-w-0 truncate text-default-500 sm:block">
+							{activeRow.categoryPath}
+						</span>
+						<div className="hidden h-3 w-px shrink-0 bg-default sm:block" />
+						<span className="hidden min-w-0 truncate text-default-500 md:block">
+							{activeRow.url}
+						</span>
+					</>
+				) : (
+					<>
+						<BiGlobe className="size-4 shrink-0 text-default-500" />
+						<span
+							className="shrink-0 font-medium truncate"
+							style={{
+								width: "calc(100% - 24px)",
+							}}
+						>
+							待开始更新，在更新前，请在下方筛选您要更新的信息范围：名称、描述、图标！
+						</span>
+					</>
+				)}
+			</div>
+			<div className="flex flex-col gap-3">
+				<div className="flex flex-wrap gap-3 gap-y-2 justify-between items-center">
+					<div className="flex flex-wrap items-center gap-2">
+						<Chip size="sm" variant="secondary" className="h-7 px-2.5 text-xs!">
+							待更新 {total}
+						</Chip>
+						<Chip size="sm" variant="secondary" className="h-7 px-2.5 text-xs!">
+							已移除 {removedCount}
+						</Chip>
+						<Chip size="sm" variant="secondary" className="h-7 px-2.5 text-xs!">
+							状态 {statusText}
+						</Chip>
+						<Chip size="sm" variant="secondary" className="h-7 px-2.5 text-xs!">
+							已获取 {stats.processed}
+						</Chip>
+						<Chip
+							size="sm"
+							variant="soft"
+							color="success"
+							className="h-7 px-2.5 text-xs!"
+						>
+							成功 {stats.success}
+						</Chip>
+						<Chip
+							size="sm"
+							variant="soft"
+							color="danger"
+							className="h-7 px-2.5 text-xs!"
+						>
+							失败 {stats.failure}
+						</Chip>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						{isRunning ? (
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-9"
+								isDisabled={status === "pausing"}
+								onPress={pauseBatch}
+							>
+								<BiPause className="size-4" />
+								<span>{status === "pausing" ? "暂停中..." : "暂停"}</span>
+							</Button>
+						) : status === "paused" ? (
+							<Button
+								variant="primary"
+								size="sm"
+								className="h-9"
+								isDisabled={total === 0 || selectedUpdateFields.length === 0}
+								onPress={() => void runBatch(false)}
+							>
+								<BiPlay className="size-4" />
+								<span>继续</span>
+							</Button>
+						) : (
+							<Button
+								variant="primary"
+								size="sm"
+								className="h-9"
+								isDisabled={total === 0 || selectedUpdateFields.length === 0}
+								onPress={() => void runBatch(true)}
+							>
+								<BiPlay className="size-4" />
+								<span>开始更新</span>
+							</Button>
+						)}
+						{(status === "paused" || status === "finished") && (
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-9"
+								isDisabled={total === 0 || selectedUpdateFields.length === 0}
+								onPress={() => void runBatch(true)}
+							>
+								<BiRefresh className="size-4" />
+								<span>重新开始</span>
+							</Button>
+						)}
+					</div>
+				</div>
+
+				<div className="flex items-center gap-3">
+					<span className="shrink-0 text-xs text-default-500">进度</span>
+					<ProgressBar
+						aria-label="批量更新进度"
+						className="min-w-0 flex-1"
+						value={progressValue}
+						maxValue={Math.max(total, 1)}
+						valueLabel={`${progressValue}/${total}`}
+					>
+						<ProgressBar.Track className="h-1.5">
+							<ProgressBar.Fill />
+						</ProgressBar.Track>
+					</ProgressBar>
+					<span className="w-14 shrink-0 text-right text-xs tabular-nums text-default-500">
+						{progressValue}/{total}
+					</span>
+				</div>
+			</div>
+
+			<section className="flex min-h-0 flex-1 flex-col gap-3 border-t border-gray-100 pt-4 dark:border-neutral-800">
+				<div className="flex justify-between items-center flex-wrap gap-3">
+					<CheckboxGroup
+						name="batch-update-fields"
+						value={selectedFields}
+						onChange={setSelectedFields}
+						isDisabled={isRunning}
+						isInvalid={selectedUpdateFields.length === 0}
+						className="min-w-0 gap-2 pl-1"
+					>
+						<div className="flex flex-wrap items-center gap-2">
+							<Label className="text-sm font-medium">更新信息</Label>
+							{selectedUpdateFields.length === 0 && (
+								<Chip
+									size="sm"
+									variant="soft"
+									color="danger"
+									className="h-5 px-2 text-xs!"
+								>
+									至少选择一项
+								</Chip>
+							)}
+						</div>
+						<div className="flex flex-wrap gap-x-4 gap-y-2">
+							{UPDATE_FIELD_OPTIONS.map((option) => (
+								<UpdateFieldCheckbox
+									key={option.value}
+									value={option.value}
+									label={option.label}
+								/>
+							))}
+						</div>
+					</CheckboxGroup>
+					<div className="flex justify-end gap-2">
+						<TextField
+							className="w-full h-9"
+							value={search}
+							onChange={setSearch}
+						>
+							<Label className="sr-only">搜索待更新网址</Label>
+							<InputGroup>
+								<InputGroup.Prefix>
+									<BiSearch className="size-4 text-default-500" />
+								</InputGroup.Prefix>
+								<InputGroup.Input placeholder="搜索名称、网址或分类..." />
+							</InputGroup>
+						</TextField>
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-9 shrink-0"
+							isDisabled={isRunning || removedCount === 0}
+							onPress={restoreAllRows}
+						>
+							<BiRefresh className="size-4" />
+							<span>恢复全部</span>
+						</Button>
+					</div>
+				</div>
+
+				<Virtualizer
+					layout={TableLayout}
+					layoutOptions={{
+						headingHeight: 36,
+						rowHeight: 42,
+					}}
+				>
+					<Table
+						aria-label="待更新网址列表"
+						className="overflow-hidden rounded-xl border border-default"
+					>
+						<Table.ScrollContainer>
+							<Table.Content
+								aria-label="待更新网址列表"
+								className="h-full min-h-96 max-h-[calc(100dvh-324px)] w-full overflow-y-scroll"
+								style={{ minWidth: TABLE_MIN_WIDTH }}
+							>
+								<Table.Header className="h-full w-full">
+									<Table.Column id="icon" width={TABLE_COLUMN_WIDTHS.icon}>
+										图标
+									</Table.Column>
+									<Table.Column
+										isRowHeader
+										id="title"
+										minWidth={TABLE_COLUMN_WIDTHS.title}
+									>
+										名称
+									</Table.Column>
+									<Table.Column
+										id="description"
+										minWidth={TABLE_COLUMN_WIDTHS.description}
+									>
+										描述
+									</Table.Column>
+									<Table.Column id="url" minWidth={TABLE_COLUMN_WIDTHS.url}>
+										URL
+									</Table.Column>
+									<Table.Column
+										id="category"
+										minWidth={TABLE_COLUMN_WIDTHS.category}
+									>
+										分类
+									</Table.Column>
+									<Table.Column
+										id="fields"
+										minWidth={TABLE_COLUMN_WIDTHS.fields}
+									>
+										已有信息
+									</Table.Column>
+									<Table.Column id="status" width={TABLE_COLUMN_WIDTHS.status}>
+										状态
+									</Table.Column>
+									<Table.Column
+										id="actions"
+										width={TABLE_COLUMN_WIDTHS.actions}
+									>
+										操作
+									</Table.Column>
+								</Table.Header>
+								<Table.Body
+									items={filteredRows}
+									renderEmptyState={() => (
+										<div className="py-12 text-center text-sm text-default-500">
+											{queueRows.length === 0
+												? "待更新列表为空"
+												: "没有匹配的网址"}
+										</div>
+									)}
+								>
+									{(row) => {
+											const rowStatus = rowStatusMap[row.statusKey] ?? "pending";
+											const rowError = rowErrorMap[row.statusKey];
+											const canRemove =
+												canEditQueue && rowStatus === "pending" && !isRunning;
+										return (
+											<Table.Row id={row.key} textValue={row.title || row.url}>
+												<Table.Cell className={"flex items-center"}>
+													<div
+														className="flex h-7 w-7 items-center justify-center rounded-md"
+														style={{
+															backgroundColor: resolveSiteBackgroundColor(
+																row.bgColor,
+															),
+															padding: toPx(row.iconPadding) || undefined,
+														}}
+													>
+														{row.icon ? (
+															(() => {
+																const iconSrc = getIconImageSrc(row.icon);
+																return iconSrc ? (
+																	<img
+																		src={iconSrc}
+																		alt={row.title}
+																		className="h-5 w-5 object-contain"
+																	/>
+																) : (
+																	<span className="flex h-5 w-5 items-center justify-center text-sm">
+																		{row.icon}
+																	</span>
+																);
+															})()
+														) : (
+															<div className="h-5 w-5" />
+														)}
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<div className="truncate font-medium text-xs">
+														{row.title || "-"}
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<div className="truncate text-xs text-default-500">
+														{row.description || "-"}
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<div className="max-w-80 truncate text-xs text-default-500">
+														{row.url}
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<div className="max-w-56 truncate text-xs text-default-500">
+														{row.categoryPath}
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<div className="flex flex-nowrap gap-1.5">
+														<InfoChip active>名称</InfoChip>
+														<InfoChip active={row.hasDescription}>
+															描述
+														</InfoChip>
+														<InfoChip active={row.hasIcon}>图标</InfoChip>
+													</div>
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<RowStatusChip status={rowStatus} error={rowError} />
+												</Table.Cell>
+												<Table.Cell className={"flex items-center"}>
+													<Button
+														isIconOnly
+														size="sm"
+														variant="outline"
+														className="h-7 w-7 text-danger"
+														aria-label="移除网址"
+														isDisabled={!canRemove}
+														onPress={() => removeRow(row)}
+													>
+														<BiTrash className="size-4" />
+													</Button>
+												</Table.Cell>
+											</Table.Row>
+										);
+									}}
+								</Table.Body>
+							</Table.Content>
+						</Table.ScrollContainer>
+					</Table>
+				</Virtualizer>
+			</section>
+		</div>
+	);
+}
+
+function UpdateFieldCheckbox({
+	value,
+	label,
+}: {
+	value: BatchUpdateField;
+	label: string;
+}) {
+	return (
+		<Checkbox value={value} className="items-center gap-2 mt-0">
+			<Checkbox.Control>
+				<Checkbox.Indicator />
+			</Checkbox.Control>
+			<Checkbox.Content>
+				<Label className="text-sm">{label}</Label>
+			</Checkbox.Content>
+		</Checkbox>
+	);
+}
+
+function InfoChip({
+	active,
+	children,
+}: {
+	active: boolean;
+	children: React.ReactNode;
+}) {
+	return (
+		<Chip
+			size="sm"
+			variant="secondary"
+			className={
+				active
+					? "h-5 px-1.5 text-xs! text-default-700"
+					: "h-5 px-1.5 text-xs! text-default-400"
+			}
+		>
+			{children}
+		</Chip>
+	);
+}
+
+function RowStatusChip({
+	status,
+	error,
+}: {
+	status: RowStatus;
+	error?: string;
+}) {
+	const content =
+		status === "running"
+			? "更新中"
+			: status === "success"
+				? "成功"
+				: status === "failure"
+					? "失败"
+					: "待更新";
+	const className =
+		status === "success"
+			? "h-5 px-2 text-xs! text-success"
+			: status === "failure"
+				? "h-5 px-2 text-xs! text-danger"
+				: status === "running"
+					? "h-5 px-2 text-xs! text-primary"
+					: "h-5 px-2 text-xs!";
+	return (
+		<Chip
+			size="sm"
+			variant="secondary"
+			className={className}
+			title={status === "failure" ? error : undefined}
+		>
+			{content}
+		</Chip>
+	);
+}

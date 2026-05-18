@@ -35,6 +35,7 @@ import {
 	BiDonateHeart,
 	BiImport,
 	BiFile,
+	BiListCheck,
 	BiSync,
 } from "react-icons/bi";
 import {
@@ -51,6 +52,7 @@ import { AdminScrollTopButton } from "./scroll-top-button";
 type RouteKey =
 	| "categories"
 	| "sites"
+	| "batch"
 	| "website"
 	| "website-layout"
 	| "website-theme"
@@ -88,8 +90,14 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 				desc: "全局搜索与批量编辑网站条目",
 			},
 			{
+				key: "batch",
+				label: "批量更新网址",
+				icon: <BiListCheck className="size-5" />,
+				desc: "筛选队列并更新网站信息",
+			},
+			{
 				key: "import",
-				label: "从外部导入",
+				label: "从书签导入",
 				icon: <BiImport className="size-5" />,
 				desc: "导入浏览器书签并自动解析分类",
 			},
@@ -248,11 +256,7 @@ function SaveShortcutGuard() {
 }
 
 /** 侧栏 / 抽屉头部品牌区：只订阅 nav.name / nav.logo，编辑其它字段不会让它重渲染 */
-function BrandBlock({
-	variant,
-}: {
-	variant: "desktop" | "drawer";
-}) {
+function BrandBlock({ variant }: { variant: "desktop" | "drawer" }) {
 	const name = useAtomValue(navFieldAtom("name"));
 	const logo = useAtomValue(navFieldAtom("logo"));
 	const logoSrc = getIconImageSrc(logo);
@@ -401,9 +405,7 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
 									>
 										<div className="flex items-center gap-2">
 											{it.icon}
-											<Label className="text-sm font-medium">
-												{it.label}
-											</Label>
+											<Label className="text-sm font-medium">{it.label}</Label>
 										</div>
 									</ListBox.Item>
 								))}

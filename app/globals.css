@@ -120,3 +120,8 @@ a[data-disabled] {
 :where(.dark) .select__trigger {
 	border: 1px solid var(--border) !important;
 }
+
+.dark .input-group,
+:where(.dark) .input-group {
+	border: 1px solid var(--border) !important;
+}
