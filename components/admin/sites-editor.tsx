@@ -1283,10 +1283,10 @@ export function SitesEditor() {
 											<Table variant="secondary" aria-label="网址列表">
 												<Table.ScrollContainer>
 													<Table.Content aria-label="网址列表">
-														<Table.Header>
-															<Table.Column className="w-12">图标</Table.Column>
-															<Table.Column
-																className="min-w-28 sm:min-w-44"
+										<Table.Header>
+											<Table.Column className="w-12">图标</Table.Column>
+											<Table.Column
+												className="min-w-28 sm:min-w-44"
 																isRowHeader
 															>
 																名称
