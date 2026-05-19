@@ -526,8 +526,10 @@ function PreviewImagePicker({
 	const onPasteImage = async (e: React.ClipboardEvent<HTMLInputElement>) => {
 		const file = e.clipboardData.items
 			? Array.from(e.clipboardData.items)
-				.find((item) => item.kind === "file" && item.type.startsWith("image/"))
-				?.getAsFile()
+					.find(
+						(item) => item.kind === "file" && item.type.startsWith("image/"),
+					)
+					?.getAsFile()
 			: null;
 		if (!file) return;
 		e.preventDefault();
@@ -540,7 +542,12 @@ function PreviewImagePicker({
 				<div className="flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-default bg-default/30">
 					{value ? (
 						// eslint-disable-next-line @next/next/no-img-element
-						<img src={value} alt="" className="h-full w-full object-cover" />
+						<img
+							src={value}
+							alt=""
+							className="h-full w-full object-cover"
+							loading="lazy"
+						/>
 					) : (
 						<span className="text-xs text-default-500">无预览图</span>
 					)}
@@ -1052,7 +1059,9 @@ export function SitesEditor() {
 				throw new Error(data.error || "获取预览图失败");
 			}
 			const data = (await res.json()) as { url: string };
-			setEditingSite((prev) => (prev ? { ...prev, previewImage: data.url } : prev));
+			setEditingSite((prev) =>
+				prev ? { ...prev, previewImage: data.url } : prev,
+			);
 			toast.success("预览图获取成功");
 		} catch (e) {
 			toast.warning((e as Error).message || "获取预览图失败");
@@ -1113,7 +1122,12 @@ export function SitesEditor() {
 		if (iconSrc) {
 			return (
 				// eslint-disable-next-line @next/next/no-img-element
-				<img src={iconSrc} alt="" className="h-5 w-5 rounded object-contain" />
+				<img
+					src={iconSrc}
+					alt=""
+					className="h-5 w-5 rounded object-contain"
+					loading="lazy"
+				/>
 			);
 		}
 		return <span className="w-5 text-center text-base">{icon}</span>;
@@ -1269,23 +1283,23 @@ export function SitesEditor() {
 											<Table variant="secondary" aria-label="网址列表">
 												<Table.ScrollContainer>
 													<Table.Content aria-label="网址列表">
-										<Table.Header>
-											<Table.Column className="w-12">图标</Table.Column>
-											<Table.Column
-												className="min-w-28 sm:min-w-44"
+														<Table.Header>
+															<Table.Column className="w-12">图标</Table.Column>
+															<Table.Column
+																className="min-w-28 sm:min-w-44"
 																isRowHeader
 															>
 																名称
 															</Table.Column>
-											<Table.Column className="min-w-60">
-												公网 URL
-											</Table.Column>
-											<Table.Column className="min-w-60">
-												内网 URL
-											</Table.Column>
-											<Table.Column className="min-w-52">
-												描述
-											</Table.Column>
+															<Table.Column className="min-w-60">
+																公网 URL
+															</Table.Column>
+															<Table.Column className="min-w-60">
+																内网 URL
+															</Table.Column>
+															<Table.Column className="min-w-52">
+																描述
+															</Table.Column>
 															<Table.Column className="w-24">
 																预览图
 															</Table.Column>

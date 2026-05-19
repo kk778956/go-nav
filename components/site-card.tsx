@@ -51,9 +51,13 @@ export const SiteCard = memo(function SiteCard({
 	const rel = target ? "noopener noreferrer" : undefined;
 	const preferredHref = useMemo(
 		() =>
-			getPreferredSiteHref(site, {
-				autoUseIntranet: layout?.autoUseIntranet,
-			}, siteLinkMode),
+			getPreferredSiteHref(
+				site,
+				{
+					autoUseIntranet: layout?.autoUseIntranet,
+				},
+				siteLinkMode,
+			),
 		[layout?.autoUseIntranet, site, siteLinkMode],
 	);
 
@@ -141,13 +145,7 @@ export const SiteCard = memo(function SiteCard({
 							className="origin-center -rotate-8 object-cover overflow-hidden rounded-md border border-solid transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] [@media(hover:hover)]:group-hover:-translate-y-1 [@media(hover:hover)]:group-hover:-rotate-1"
 						/>
 					) : (
-						<SiteIcon
-							site={site as NavSite}
-							layout={layout}
-							size={Number(layout?.cardHeight) || 80}
-							className="origin-center -rotate-8 object-cover overflow-hidden rounded-md transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] [@media(hover:hover)]:group-hover:-translate-y-1 [@media(hover:hover)]:group-hover:-rotate-1"
-							showDefaultBackgroundColor={false}
-						/>
+						<div className="h-full w-full bg-default/60 origin-center -rotate-8 overflow-hidden rounded-md border border-solid transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] [@media(hover:hover)]:group-hover:-translate-y-1 [@media(hover:hover)]:group-hover:-rotate-1"></div>
 					)}
 				</div>
 			</a>
